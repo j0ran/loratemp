@@ -1,4 +1,6 @@
 #include "DHT.h"
+#include "LowPower.h"
+#include <PinChangeInterrupt.h>
 
 #define DHTPIN 2
 #define DHTTYPE DHT11
