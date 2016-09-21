@@ -8,8 +8,9 @@ DHT dht(DHTPIN, DHTTYPE);
 #define STATE_JOIN 0
 #define STATE_TX 1
 
-int state = 0;
-int wait_time = 10;
+byte state = 0;
+unsigned long wait_time = 10;
+int rxpin = digitalPinToPinChangeInterrupt(0);
 
 void clearInput() {
   while(Serial.read() != -1);
@@ -66,15 +67,32 @@ void setup() {
 void loop() {
   String res;
 
-  for(int i = 0; i < wait_time; i++) {
-    if(state == STATE_JOIN) digitalWrite(13, i % 2 == 0 ? HIGH : LOW);
-    else digitalWrite(13, HIGH);
-    delay(1000);
+  if(wait_time > 10) {    
+    clearInput();
+    Serial.print("sys sleep ");
+    Serial.print(wait_time * 1000);
+    Serial.print("\r\n");
+    Serial.flush();
+
+    digitalWrite(13, LOW);
+    enablePCINT(rxpin);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+    disablePCINT(rxpin);
+    digitalWrite(13, HIGH);
+
+    delay(300);   // receive rest of ok command
+    clearInput(); // clear out buffer
   }
-
-  wait_time = 300;
-
+  else {
+    for(int i = 0; i < wait_time; i++) {
+      if(state == STATE_JOIN) digitalWrite(13, i % 2 == 0 ? HIGH : LOW);
+      else digitalWrite(13, HIGH);
+      delay(1000);
+    }
+  }
+  
   if(state == STATE_JOIN) {
+    wait_time = 60;
     clearInput();
     
     Serial.print("mac join otaa\r\n");
@@ -89,8 +107,9 @@ void loop() {
     state = STATE_TX;
   }
   else {
+    wait_time = 300;
     clearInput();
-    
+
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     
