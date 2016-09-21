@@ -42,7 +42,7 @@ void send(String &str) {
   Serial.print("mac tx cnf 1 ");
   for(int i = 0; i < str.length(); i++) {
     if(str[i] < 16) {
-      Serial.println('0');
+      Serial.print('0');
     }
     Serial.print(str[i], HEX);
   }
