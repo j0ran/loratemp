@@ -2,6 +2,16 @@
 #include "LowPower.h"
 #include <PinChangeInterrupt.h>
 
+union Data {
+  struct {
+    unsigned char type;
+    float temp;
+    float humid;
+    int light;
+  } packet;
+  unsigned char bytes[sizeof(packet)];
+};
+
 #define DHTPIN 2
 #define DHTTYPE DHT11
 
@@ -10,7 +20,7 @@ DHT dht(DHTPIN, DHTTYPE);
 #define STATE_JOIN 0
 #define STATE_TX 1
 
-byte state = 0;
+byte state = STATE_JOIN;
 unsigned long wait_time = 10;
 int rxpin = digitalPinToPinChangeInterrupt(0);
 
@@ -41,21 +51,39 @@ String readLine() {
   }
 }
 
-void send(String &str) {
+void send(Data &data) {
   Serial.print("mac tx cnf 1 ");
-  for(int i = 0; i < str.length(); i++) {
-    if(str[i] < 16) {
+  for(int i = 0; i < sizeof(data.bytes); i++) {
+    if(data.bytes[i] < 16) {
       Serial.print('0');
     }
-    Serial.print(str[i], HEX);
+    Serial.print(data.bytes[i], HEX);
   }
   Serial.print("\r\n");
 }
 
+void readSensors(Data &data) {
+    // Turn on power to sensors
+    digitalWrite(3, HIGH);
+    digitalWrite(4, HIGH);
+    delay(50);
+
+    data.packet.type = 1;
+    data.packet.light = 0;
+    for(int i = 0; i < 20; i++) {
+      data.packet.light += analogRead(0);
+      delay(5);
+    }
+    data.packet.light /= 20;    
+    data.packet.humid = dht.readHumidity();
+    data.packet.temp = dht.readTemperature();  
+}
+
 void setup() {
-  String res;
   pinMode(13, OUTPUT);
-  digitalWrite(13, LOW);
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
+  digitalWrite(13, HIGH);
   Serial.begin(57600);
   dht.begin();
   
@@ -63,11 +91,15 @@ void setup() {
   
   clearInput();
   Serial.print("\r\n");
-  res = readLine();
+  readLine();
 }
 
 void loop() {
   String res;
+
+  // turn of power to sensors
+  digitalWrite(3, LOW);
+  digitalWrite(4, LOW);
 
   if(wait_time > 10) {    
     clearInput();
@@ -76,21 +108,30 @@ void loop() {
     Serial.print("\r\n");
     Serial.flush();
 
-    digitalWrite(13, LOW);
+    // if not connected keep led on, if connected led is off
+    if(state == STATE_TX) digitalWrite(13, LOW);
+    else digitalWrite(13, HIGH);
+
+    // Go to sleep and wait for data on uart
     enablePCINT(rxpin);
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     disablePCINT(rxpin);
-    digitalWrite(13, HIGH);
 
-    delay(300);   // receive rest of ok command
+    // Show wakeup by blinking led and receive rest of ok command
+    for(int i = 1; i < 10; i++) {
+      digitalWrite(13, i % 2 == 0 ? LOW : HIGH);
+      delay(100);
+    }
+
     clearInput(); // clear out buffer
   }
-  else {
+  else {    
     for(int i = 0; i < wait_time; i++) {
       if(state == STATE_JOIN) digitalWrite(13, i % 2 == 0 ? HIGH : LOW);
       else digitalWrite(13, HIGH);
       delay(1000);
     }
+    digitalWrite(13, HIGH);
   }
   
   if(state == STATE_JOIN) {
@@ -112,15 +153,14 @@ void loop() {
     wait_time = 300;
     clearInput();
 
-    float h = dht.readHumidity();
-    float t = dht.readTemperature();
-    
-    if (isnan(h) || isnan(t)) {
+    Data data;
+    readSensors(data);
+        
+    if (isnan(data.packet.temp) || isnan(data.packet.humid)) {
       return;
     }
-  
-    String str = String("{\"temp\": ") + t + ", \"humid\": " + h + " }";
-    send(str);
+ 
+    send(data);
     res = readLine();
     if(res == "no_free_ch") {
       return;
