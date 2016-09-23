@@ -9,6 +9,11 @@ The hardware is as follows:
 * A photocell should be connected to A0 with power connected to pin 4. (using 10K resistor pulldown to GND)
 * RN2483 connected using serial to the Arduino (pin 0 and 1)
 
+Depenencies:
+* DHT sensor library by Adafruit Version 1.2.3
+* Low-Power by Rocket Scream Electronics Version 1.6.0
+* PinChangeInterrupt by NicoHood Version 1.2.4
+
 The sketch doesn't configure the RN2483. This should be done manually:
 * DevEUI should be set: <code>mac set deveui 0000000000000000</code>
 * AppEUI should be set: <code>mac set appeui 0000000000000000</code>
