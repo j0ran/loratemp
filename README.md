@@ -15,4 +15,20 @@ The sketch doesn't configure the RN2483. This should be done manually:
 * AppKey should be set: <code>mac set appkey 00000000000000000000000000000000</code>
 * The config should be saved: <code>mac save</code>
 
+Led indicator:
+* Led is on - trying to join network
+* Led is off - joined the network
+* Blinking 300ms - waiting for data from RN2483
 
+Startup:
+1. blinking 1s for 5 seconds - startup
+2. blinking 300ms - waiting for otaa join
+3. if led goes off means joined, if led goes on means not joined.
+4. wait 60 seconds
+5. If not joined go to step 2.
+6. measuring sensor data and sending it using the RN2483
+7. blinking 300ms - waiting for confirmation.
+8. wait 5 minutes
+9. goto step 6
+
+  
