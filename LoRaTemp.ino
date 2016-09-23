@@ -15,13 +15,20 @@ union Data {
 #define DHTPIN 2
 #define DHTTYPE DHT11
 
-DHT dht(DHTPIN, DHTTYPE);
-
 #define STATE_JOIN 0
 #define STATE_TX 1
 
+#define TOGGLE -1
+#define SAVE -2
+#define RESTORE -3
+
+#define INITIAL_JOIN_INTERVAL 5
+#define JOIN_RETRY_INTERVAL 60
+int send_interval = 300;
+
+DHT dht(DHTPIN, DHTTYPE);
 byte state = STATE_JOIN;
-unsigned long wait_time = 10;
+unsigned long wait_time = INITIAL_JOIN_INTERVAL;
 int rxpin = digitalPinToPinChangeInterrupt(0);
 
 void clearInput() {
@@ -31,15 +38,18 @@ void clearInput() {
 String readLine() {
   String line;
 
+  led(SAVE);
   while(true) {
     int c = Serial.read();
     
     if(c == -1) {
+      led(TOGGLE);
       delay(300);      
       continue;
     }
 
     if(c == '\n') {
+      led(RESTORE);
       return line;
     }
 
@@ -64,8 +74,7 @@ void send(Data &data) {
 
 void readSensors(Data &data) {
     // Turn on power to sensors
-    digitalWrite(3, HIGH);
-    digitalWrite(4, HIGH);
+    powerToSensors(HIGH);
     delay(50);
 
     data.packet.type = 1;
@@ -76,41 +85,20 @@ void readSensors(Data &data) {
     }
     data.packet.light /= 20;    
     data.packet.humid = dht.readHumidity();
-    data.packet.temp = dht.readTemperature();  
+    data.packet.temp = dht.readTemperature();
+
+    // We are done, turn of the power
+    powerToSensors(LOW);
 }
 
-void setup() {
-  pinMode(13, OUTPUT);
-  pinMode(3, OUTPUT);
-  pinMode(4, OUTPUT);
-  digitalWrite(13, HIGH);
-  Serial.begin(57600);
-  dht.begin();
-  
-  delay(1000);
-  
-  clearInput();
-  Serial.print("\r\n");
-  readLine();
-}
-
-void loop() {
-  String res;
-
-  // turn of power to sensors
-  digitalWrite(3, LOW);
-  digitalWrite(4, LOW);
-
-  if(wait_time > 10) {    
+// put system in low power mode
+void powerDown(int seconds) {
+    // send sleep command
     clearInput();
     Serial.print("sys sleep ");
     Serial.print(wait_time * 1000);
     Serial.print("\r\n");
     Serial.flush();
-
-    // if not connected keep led on, if connected led is off
-    if(state == STATE_TX) digitalWrite(13, LOW);
-    else digitalWrite(13, HIGH);
 
     // Go to sleep and wait for data on uart
     enablePCINT(rxpin);
@@ -118,24 +106,79 @@ void loop() {
     disablePCINT(rxpin);
 
     // Show wakeup by blinking led and receive rest of ok command
+    led(SAVE);
     for(int i = 1; i < 10; i++) {
-      digitalWrite(13, i % 2 == 0 ? LOW : HIGH);
+      led(TOGGLE);
       delay(100);
     }
+    led(RESTORE);
+    
+    clearInput(); // read rest of ok
+}
 
-    clearInput(); // clear out buffer
-  }
-  else {    
+void sleepBlink(int seconds) {
+    led(SAVE);
     for(int i = 0; i < wait_time; i++) {
-      if(state == STATE_JOIN) digitalWrite(13, i % 2 == 0 ? HIGH : LOW);
-      else digitalWrite(13, HIGH);
+      led(TOGGLE);
       delay(1000);
     }
-    digitalWrite(13, HIGH);
+    led(RESTORE);
+}
+
+void powerToSensors(int state) {
+  digitalWrite(3, state);
+  digitalWrite(4, state);
+}
+
+void led(int state) {
+  static int led_mem;
+
+  if(state == SAVE) {
+    led_mem = digitalRead(13);
+  }
+  else if(state == RESTORE) {
+    digitalWrite(13, led_mem);
+  }
+  else if(state == TOGGLE) {
+    digitalWrite(13, !digitalRead(13));
+  }
+  else { 
+    digitalWrite(13, state);
+  }
+}
+
+void setup() {
+  pinMode(13, OUTPUT);
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
+  
+  led(HIGH);
+  powerToSensors(LOW);
+  Serial.begin(57600);
+  dht.begin();
+  
+  delay(500);
+
+  // clear input and send a newline to clear the output
+  clearInput();
+  Serial.print("\r\n");
+  readLine(); // read invalid_parm response
+}
+
+void loop() {
+  String res;
+
+  led(state == STATE_JOIN ? HIGH : LOW);
+
+  if(wait_time > 10) {    
+    powerDown(wait_time);
+  }
+  else {    
+    sleepBlink(wait_time);
   }
   
   if(state == STATE_JOIN) {
-    wait_time = 60;
+    wait_time = JOIN_RETRY_INTERVAL;
     clearInput();
     
     Serial.print("mac join otaa\r\n");
@@ -150,7 +193,7 @@ void loop() {
     state = STATE_TX;
   }
   else {
-    wait_time = 300;
+    wait_time = send_interval;
     clearInput();
 
     Data data;
@@ -162,11 +205,12 @@ void loop() {
  
     send(data);
     res = readLine();
-    if(res == "no_free_ch") {
+    if(res == "not_joined") {
+      state = STATE_JOIN;
+      wait_time = JOIN_RETRY_INTERVAL;
       return;
     }
     if(res != "ok") {
-      state = STATE_JOIN;
       return;
     }
     res = readLine(); // read the mac_rx 1 response... ignoring
