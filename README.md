@@ -21,6 +21,7 @@ Led indicator:
 * Blinking 300ms - waiting for data from RN2483
 
 Startup:
+
 1. blinking 1s for 5 seconds - startup
 2. blinking 300ms - waiting for otaa join
 3. if led goes off means joined, if led goes on means not joined.
