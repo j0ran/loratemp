@@ -148,13 +148,19 @@ void led(int state) {
 }
 
 void setup() {
+  delay(500);
+  pinMode(1, OUTPUT); // take the tx pin
+  digitalWrite(1, LOW); // pull low for break
+  delay(50); // sending break
+  Serial.begin(4800);
+  Serial.print("\x55");
+  
   pinMode(13, OUTPUT);
   pinMode(3, OUTPUT);
   pinMode(4, OUTPUT);
   
   led(HIGH);
   powerToSensors(LOW);
-  Serial.begin(57600);
   dht.begin();
   
   delay(500);
