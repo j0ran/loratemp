@@ -37,4 +37,7 @@ Startup:
 8. wait 5 minutes
 9. goto step 6
 
-  
+Fuse settings for internal clock 8Mhz use:
+
+  avrdude -U lfuse:w:0xe2:m -U hfuse:w:0xd9:m -U efuse:w:0xfe:m -p m328p -c usbasp
+
