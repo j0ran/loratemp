@@ -31,6 +31,10 @@ byte state = STATE_JOIN;
 unsigned long wait_time = INITIAL_JOIN_INTERVAL;
 int rxpin = digitalPinToPinChangeInterrupt(0);
 
+// Prevent reset when interupt is triggered
+ISR(PCINT2_vect) {
+}
+
 void clearInput() {
   while(Serial.read() != -1);
 }
